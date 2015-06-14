@@ -1,6 +1,7 @@
 //! Provides a single type, `CBox`
 extern crate libc;
 use libc::{malloc, free, c_char, c_void, size_t};
+use std::borrow::Borrow;
 use std::ffi::{CString, CStr};
 use std::{fmt, mem, str};
 use std::ops::{Deref, DerefMut, Drop};
@@ -59,6 +60,11 @@ impl<'a, D:?Sized> Drop for CBox<'a, D> where D:DisposeRef+'a {
 impl<'a, D> Deref for CBox<'a, D> where D:DisposeRef+'a, *mut D::RefTo:Into<&'a D> {
     type Target = D;
     fn deref(&self) -> &D {
+        self.ptr.into()
+    }
+}
+impl<'a, D> Borrow<D> for CBox<'a, D> where D:DisposeRef+'a, *mut D::RefTo:Into<&'a D> {
+    fn borrow(&self) -> &D {
         self.ptr.into()
     }
 }
