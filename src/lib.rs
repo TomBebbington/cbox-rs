@@ -1,8 +1,8 @@
 //! Provides a single type, `CBox`
 extern crate libc;
 use libc::{malloc, free, c_char, c_void, size_t};
-use std::ffi::CStr;
-use std::{fmt, ptr, str};
+use std::ffi::{CString, CStr};
+use std::{fmt, mem, str};
 use std::ops::{Deref, DerefMut, Drop};
 use std::marker::PhantomData;
 /// Implemented by any type represented by a pointer that can be disposed
@@ -32,8 +32,21 @@ impl<'a, D:?Sized> CBox<'a, D> where D:DisposeRef+'a {
     }
     #[inline(always)]
     /// Returns the internal pointer
-    pub fn unwrap(self) -> *mut D::RefTo {
+    pub unsafe fn as_ptr(&self) -> *mut D::RefTo {
         self.ptr
+    }
+    #[inline(always)]
+    /// Returns the internal pointer
+    pub unsafe fn unwrap(self) -> *mut D::RefTo {
+        let ptr = self.ptr;
+        mem::forget(self);
+        ptr
+    }
+}
+impl<'a, D:?Sized> From<*mut D::RefTo> for CBox<'a, D> where D:DisposeRef+'a {
+    #[inline(always)]
+    fn from(ptr: *mut D::RefTo) -> Self {
+        CBox::new(ptr)
     }
 }
 impl<'a, D:?Sized> Drop for CBox<'a, D> where D:DisposeRef+'a {
@@ -66,9 +79,18 @@ impl<'a> Deref for CBox<'a, str> {
 impl<'a, 'b> From<&'a str> for CBox<'b, str> {
     fn from(text: &'a str) -> CBox<'b, str> {
         unsafe {
+            let cstr = CString::new(text).unwrap();
             let ptr = libc::malloc(text.len() as size_t + 1) as *mut c_char;
-            ptr::copy(text.as_ptr() as *mut c_char, ptr, text.len());
-            ptr::write(text.as_ptr().offset(text.len() as isize) as *mut c_char, 0);
+            libc::strcpy(ptr, cstr.as_ptr());
+            CBox::new(ptr)
+        }
+    }
+}
+impl<'a> Clone for CBox<'a, str> {
+    fn clone(&self) -> CBox<'a, str> {
+        unsafe {
+            let ptr = libc::malloc(self.len() as size_t + 1) as *mut c_char;
+            libc::strcpy(ptr, self.ptr);
             CBox::new(ptr)
         }
     }

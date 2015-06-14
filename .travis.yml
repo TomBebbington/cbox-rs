@@ -1,0 +1,6 @@
+language: rust
+rust: beta
+
+script:
+  cargo build --verbose
+  cargo run --example str
