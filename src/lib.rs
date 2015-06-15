@@ -5,6 +5,7 @@ use std::borrow::Borrow;
 use std::ffi::{CString, CStr};
 use std::{fmt, mem, str};
 use std::ops::{Deref, DerefMut, Drop};
+use std::cmp::PartialEq;
 use std::marker::PhantomData;
 /// Implemented by any type represented by a pointer that can be disposed
 pub trait DisposeRef {
@@ -119,6 +120,11 @@ impl<'a, T> fmt::Display for CBox<'a, T> where T:fmt::Display+DisposeRef+'a, *mu
 impl<'a, T> fmt::Debug for CBox<'a, T> where T:fmt::Debug+DisposeRef+'a, *mut T::RefTo:Into<&'a T> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self as &T, fmt)
+    }
+}
+impl<'a, T> PartialEq<T> for CBox<'a, T> where T:'a+DisposeRef+PartialEq, *mut T::RefTo:Into<&'a T> {
+    fn eq(&self, other: &T) -> bool {
+        (self as &T).eq(other)
     }
 }
 impl DisposeRef for str {
