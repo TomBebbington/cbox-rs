@@ -1,4 +1,4 @@
-//! Provides a single type, `CBox`
+//! Provides two types, `CBox` and `DisposeRef`
 extern crate libc;
 use libc::{malloc, free, c_char, c_void, size_t};
 use std::borrow::Borrow;
@@ -7,15 +7,19 @@ use std::{fmt, mem, str};
 use std::ops::{Deref, DerefMut, Drop};
 use std::cmp::PartialEq;
 use std::marker::PhantomData;
-/// Implemented by any type represented by a pointer that can be disposed
+/// Implemented by any type of which its reference represents a C pointer that can be disposed.
 pub trait DisposeRef {
-    /// What type this reference is to
+    /// What a reference to this type represents as a C pointer.
     type RefTo;
-    /// Destroy the contents at the pointer's location
-    unsafe fn dispose(ptr: *mut Self::RefTo);
+    /// Destroy the contents at the pointer's location.
+    ///
+    /// This should run some variant of `libc::free(ptr)`
+    unsafe fn dispose(ptr: *mut Self::RefTo) {
+        free(ptr as *mut c_void);
+    }
 }
 
-/// A wrapper for pointers made by C that have aliases in Rust
+/// A wrapper for pointers made by C that are now owned in Rust.
 ///
 /// This is necessary to allow owned and borrowed representations of C types
 /// to be represented by the same type as they are in C with little overhead
@@ -129,7 +133,4 @@ impl<'a, T> PartialEq<T> for CBox<'a, T> where T:'a+DisposeRef+PartialEq, *mut T
 }
 impl DisposeRef for str {
     type RefTo = c_char;
-    unsafe fn dispose(ptr: *mut c_char) {
-        free(ptr as *mut c_void)
-    }
 }
