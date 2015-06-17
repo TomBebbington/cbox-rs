@@ -1,4 +1,4 @@
-//! Provides two types, `CBox` and `DisposeRef`
+//! Provides two types, `CSemiBox` and `DisposeRef`
 extern crate libc;
 use libc::{malloc, free, c_char, c_void, size_t};
 use std::borrow::Borrow;
@@ -19,19 +19,19 @@ pub trait DisposeRef {
     }
 }
 
-/// A wrapper for pointers made by C that are now owned in Rust.
+/// A wrapper for pointers made by C that are now partially owned in Rust.
 ///
 /// This is necessary to allow owned and borrowed representations of C types
 /// to be represented by the same type as they are in C with little overhead
-pub struct CBox<'a, D:?Sized> where D:DisposeRef+'a {
+pub struct CSemiBox<'a, D:?Sized> where D:DisposeRef+'a {
     ptr: *mut D::RefTo,
     marker: PhantomData<&'a ()>
 }
-impl<'a, D:?Sized> CBox<'a, D> where D:DisposeRef+'a {
+impl<'a, D:?Sized> CSemiBox<'a, D> where D:DisposeRef+'a {
     #[inline(always)]
-    /// Wrap the pointer in a `CBox`
+    /// Wrap the pointer in a `CSemiBox`
     pub fn new(ptr: *mut D::RefTo) -> Self {
-        CBox {
+        CSemiBox {
             ptr: ptr,
             marker: PhantomData
         }
@@ -49,46 +49,102 @@ impl<'a, D:?Sized> CBox<'a, D> where D:DisposeRef+'a {
         ptr
     }
 }
-impl<'a, D:?Sized> From<*mut D::RefTo> for CBox<'a, D> where D:DisposeRef+'a {
+impl<'a, D:?Sized> From<*mut D::RefTo> for CSemiBox<'a, D> where D:DisposeRef+'a {
     #[inline(always)]
     fn from(ptr: *mut D::RefTo) -> Self {
-        CBox::new(ptr)
+        CSemiBox::new(ptr)
     }
 }
-impl<'a, D:?Sized> Drop for CBox<'a, D> where D:DisposeRef+'a {
+impl<'a, D:?Sized> Drop for CSemiBox<'a, D> where D:DisposeRef+'a {
     #[inline(always)]
     /// Run the destructor
     fn drop(&mut self) {
         unsafe { <D as DisposeRef>::dispose(self.ptr) }
     }
 }
-impl<'a, D> Deref for CBox<'a, D> where D:DisposeRef+'a, *mut D::RefTo:Into<&'a D> {
+impl<'a, D> Deref for CSemiBox<'a, D> where D:DisposeRef+'a, *mut D::RefTo:Into<&'a D> {
     type Target = D;
     fn deref(&self) -> &D {
         self.ptr.into()
     }
 }
-impl<'a, D> Borrow<D> for CBox<'a, D> where D:DisposeRef+'a, *mut D::RefTo:Into<&'a D> {
+impl<'a, D> Borrow<D> for CSemiBox<'a, D> where D:DisposeRef+'a, *mut D::RefTo:Into<&'a D> {
     fn borrow(&self) -> &D {
         self.ptr.into()
     }
 }
-impl<'a, D> DerefMut for CBox<'a, D> where D:DisposeRef+'a, *mut D::RefTo:Into<&'a D>, *mut D::RefTo:Into<&'a mut D> {
+impl<'a, D> DerefMut for CSemiBox<'a, D> where D:DisposeRef+'a, *mut D::RefTo:Into<&'a D>, *mut D::RefTo:Into<&'a mut D> {
     fn deref_mut(&mut self) -> &mut D {
         self.ptr.into()
     }
 }
-impl<'a> Deref for CBox<'a, str> {
-    type Target = str;
-    fn deref(&self) -> &str {
+impl<'a, T> fmt::Display for CSemiBox<'a, T> where T:fmt::Display+DisposeRef+'a, *mut T::RefTo:Into<&'a T> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self as &T, fmt)
+    }
+}
+impl<'a, T> fmt::Debug for CSemiBox<'a, T> where T:fmt::Debug+DisposeRef+'a, *mut T::RefTo:Into<&'a T> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self as &T, fmt)
+    }
+}
+impl<'a, T> PartialEq<T> for CSemiBox<'a, T> where T:'a+DisposeRef+PartialEq, *mut T::RefTo:Into<&'a T> {
+    fn eq(&self, other: &T) -> bool {
+        (self as &T).eq(other)
+    }
+}
+impl<'a> From<&'a CStr> for CSemiBox<'a, str> {
+    fn from(text: &'a CStr) -> CSemiBox<'a, str> {
+        CSemiBox::new(text.as_ptr() as *mut c_char)
+    }
+}
+impl DisposeRef for str {
+    type RefTo = c_char;
+}
+
+/// A wrapper for pointers made by C that are now completely owned by Rust, so
+/// they are not limited by any lifetimes.
+///
+/// This is necessary to allow owned and borrowed representations of C types
+/// to be represented by the same type as they are in C with little overhead.
+pub struct CBox<D:?Sized> where D:DisposeRef {
+    ptr: *mut D::RefTo
+}
+impl<D:?Sized> CBox<D> where D:DisposeRef {
+    #[inline(always)]
+    /// Wrap the pointer in a `CBox`
+    pub fn new(ptr: *mut D::RefTo) -> Self {
+        CBox {
+            ptr: ptr
+        }
+    }
+    #[inline(always)]
+    /// Returns the internal pointer
+    pub unsafe fn as_ptr(&self) -> *mut D::RefTo {
+        self.ptr
+    }
+    #[inline(always)]
+    /// Returns the internal pointer
+    pub unsafe fn unwrap(self) -> *mut D::RefTo {
+        let ptr = self.ptr;
+        mem::forget(self);
+        ptr
+    }
+    /// Returns the box as a 'CSemiBox'
+    pub fn as_semi<'a>(&'a self) -> &CSemiBox<'a, D> {
         unsafe {
-            let text = CStr::from_ptr(self.ptr);
-            str::from_utf8_unchecked(text.to_bytes())
+            mem::transmute(self)
+        }
+    }
+    /// Returns the box as a 'CSemiBox'
+    pub fn as_semi_mut<'a>(&'a mut self) -> &mut CSemiBox<'a, D> {
+        unsafe {
+            mem::transmute(self)
         }
     }
 }
-impl<'a, 'b> From<&'a str> for CBox<'b, str> {
-    fn from(text: &'a str) -> CBox<'b, str> {
+impl<'a> From<&'a str> for CBox<str> {
+    fn from(text: &'a str) -> CBox<str> {
         unsafe {
             let cstr = CString::new(text).unwrap();
             let ptr = libc::malloc(text.len() as size_t + 1) as *mut c_char;
@@ -97,8 +153,18 @@ impl<'a, 'b> From<&'a str> for CBox<'b, str> {
         }
     }
 }
-impl<'a> Clone for CBox<'a, str> {
-    fn clone(&self) -> CBox<'a, str> {
+
+impl<'a> Deref for CBox<str> {
+    type Target = str;
+    fn deref(&self) -> &str {
+        unsafe {
+            let text = CStr::from_ptr(self.ptr);
+            str::from_utf8_unchecked(text.to_bytes())
+        }
+    }
+}
+impl Clone for CBox<str> {
+    fn clone(&self) -> CBox<str> {
         unsafe {
             let ptr = libc::malloc(self.len() as size_t + 1) as *mut c_char;
             libc::strcpy(ptr, self.ptr);
@@ -106,31 +172,13 @@ impl<'a> Clone for CBox<'a, str> {
         }
     }
 }
-impl<'a> fmt::Display for CBox<'a, str> {
+impl fmt::Display for CBox<str> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.write_str(self.deref())
     }
 }
-impl<'a> fmt::Debug for CBox<'a, str> {
+impl fmt::Debug for CBox<str> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.write_str(self.deref())
     }
-}
-impl<'a, T> fmt::Display for CBox<'a, T> where T:fmt::Display+DisposeRef+'a, *mut T::RefTo:Into<&'a T> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self as &T, fmt)
-    }
-}
-impl<'a, T> fmt::Debug for CBox<'a, T> where T:fmt::Debug+DisposeRef+'a, *mut T::RefTo:Into<&'a T> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self as &T, fmt)
-    }
-}
-impl<'a, T> PartialEq<T> for CBox<'a, T> where T:'a+DisposeRef+PartialEq, *mut T::RefTo:Into<&'a T> {
-    fn eq(&self, other: &T) -> bool {
-        (self as &T).eq(other)
-    }
-}
-impl DisposeRef for str {
-    type RefTo = c_char;
 }
