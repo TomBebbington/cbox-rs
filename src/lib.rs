@@ -182,3 +182,10 @@ impl fmt::Debug for CBox<str> {
         fmt.write_str(self.deref())
     }
 }
+impl<'a, T> PartialEq<T> for CBox<T> where T:DisposeRef+PartialEq, *mut T::RefTo:Into<&'a T> {
+    fn eq(&self, other: &T) -> bool {
+        unsafe {
+            mem::transmute::<_, &T>(self.ptr) == other
+        }
+    }
+}
