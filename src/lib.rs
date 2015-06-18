@@ -112,31 +112,31 @@ pub struct CBox<D:?Sized> where D:DisposeRef {
 }
 impl<D:?Sized> CBox<D> where D:DisposeRef {
     #[inline(always)]
-    /// Wrap the pointer in a `CBox`
+    /// Wrap the pointer in a `CBox`.
     pub fn new(ptr: *mut D::RefTo) -> Self {
         CBox {
             ptr: ptr
         }
     }
     #[inline(always)]
-    /// Returns the internal pointer
+    /// Returns the internal pointer.
     pub unsafe fn as_ptr(&self) -> *mut D::RefTo {
         self.ptr
     }
     #[inline(always)]
-    /// Returns the internal pointer
+    /// Returns the internal pointer.
     pub unsafe fn unwrap(self) -> *mut D::RefTo {
         let ptr = self.ptr;
         mem::forget(self);
         ptr
     }
-    /// Returns the box as a 'CSemiBox'
+    /// Returns the box as a 'CSemiBox'.
     pub fn as_semi<'a>(&'a self) -> &CSemiBox<'a, D> {
         unsafe {
             mem::transmute(self)
         }
     }
-    /// Returns the box as a 'CSemiBox'
+    /// Returns the box as a 'CSemiBox'.
     pub fn as_semi_mut<'a>(&'a mut self) -> &mut CSemiBox<'a, D> {
         unsafe {
             mem::transmute(self)
@@ -144,6 +144,7 @@ impl<D:?Sized> CBox<D> where D:DisposeRef {
     }
 }
 impl<'a> From<&'a str> for CBox<str> {
+    /// Copy this text using malloc and strcpy.
     fn from(text: &'a str) -> CBox<str> {
         unsafe {
             let cstr = CString::new(text).unwrap();
@@ -180,6 +181,23 @@ impl fmt::Display for CBox<str> {
 impl fmt::Debug for CBox<str> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.write_str(self.deref())
+    }
+}
+
+impl<T> Deref for CBox<T> where T:DisposeRef {
+    type Target = T;
+    fn deref(&self) -> &T {
+        unsafe { mem::transmute(self.ptr) }
+    }
+}
+impl<T> Borrow<T> for CBox<T> where T:DisposeRef {
+    fn borrow(&self) -> &T {
+        unsafe { mem::transmute(self.ptr) }
+    }
+}
+impl<T> DerefMut for CBox<T> where T:DisposeRef {
+    fn deref_mut(&mut self) -> &mut T {
+        unsafe { mem::transmute(self.ptr) }
     }
 }
 impl<'a, T> PartialEq<T> for CBox<T> where T:DisposeRef+PartialEq, *mut T::RefTo:Into<&'a T> {
