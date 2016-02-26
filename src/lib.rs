@@ -200,7 +200,7 @@ impl<T> DerefMut for CBox<T> where T:DisposeRef {
         unsafe { mem::transmute(self.ptr) }
     }
 }
-impl<'a, T> PartialEq<T> for CBox<T> where T:DisposeRef+PartialEq, *mut T::RefTo:Into<&'a T> {
+impl<'a, T> PartialEq<T> for CBox<T> where T:'a+DisposeRef+PartialEq, *mut T::RefTo:Into<&'a T> {
     fn eq(&self, other: &T) -> bool {
         unsafe {
             mem::transmute::<_, &T>(self.ptr) == other
