@@ -1,6 +1,6 @@
 //! Provides two types, `CSemiBox` and `DisposeRef`
 extern crate libc;
-use libc::{malloc, free, c_char, c_void, size_t};
+use libc::{free, c_char, c_void, size_t};
 use std::borrow::Borrow;
 use std::ffi::{CString, CStr};
 use std::{fmt, mem, str};
