@@ -1,12 +1,12 @@
 [root]
 name = "cbox"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
- "libc 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.12 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "libc"
-version = "0.2.8"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
